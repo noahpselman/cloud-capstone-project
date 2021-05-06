@@ -16,6 +16,10 @@ from botocore.exceptions import ClientError
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
+# Get the IAM username that was stashed at alunch time
+with open('/home/ubuntu/.launch_user', 'r') as file:
+  iam_username = file.read().replace('\n', '')
+
 class Config(object):  
   GAS_LOG_LEVEL = os.environ['GAS_LOG_LEVEL'] \
     if ('GAS_LOG_LEVEL' in os.environ) else 'INFO'
@@ -57,7 +61,11 @@ class Config(object):
     print(f"Unable to retrieve accounts database credentials from ASM: {e}")
     raise e
 
-  SQLALCHEMY_DATABASE_TABLE = os.environ['ACCOUNTS_DATABASE_TABLE']
+  if ('ACCOUNTS_DATABASE_TABLE' in  os.environ):
+    SQLALCHEMY_DATABASE_TABLE = os.environ['ACCOUNTS_DATABASE_TABLE']
+  else:
+    SQLALCHEMY_DATABASE_TABLE = f"{iam_username}_accounts"
+  
   SQLALCHEMY_DATABASE_URI = "postgresql://" + \
     rds_secret['username'] + ':' + rds_secret['password'] + \
     '@' + rds_secret['host'] + ':' + str(rds_secret['port']) + \
@@ -96,7 +104,7 @@ class Config(object):
   AWS_S3_RESULTS_BUCKET = "gas-results"
   # Set the S3 key (object name) prefix to your CNetID
   # Keep the trailing '/' if using my upload code in views.py
-  AWS_S3_KEY_PREFIX = "<CNetID>/"
+  AWS_S3_KEY_PREFIX = f"{iam_username}/"
   AWS_S3_ACL = "private"
   AWS_S3_ENCRYPTION = "AES256"
 
@@ -104,16 +112,16 @@ class Config(object):
 
   # AWS SNS topics
   AWS_SNS_JOB_REQUEST_TOPIC = \
-    "arn:aws:sns:us-east-1:127134666975:<CNetID>_job_requests"
+    f"arn:aws:sns:us-east-1:127134666975:{iam_username}_job_requests"
 
   # AWS SQS queues
   AWS_SQS_REQUESTS_QUEUE_NAME = ""
 
   # AWS DynamoDB table
-  AWS_DYNAMODB_ANNOTATIONS_TABLE = "<CNetID>_annotations"
+  AWS_DYNAMODB_ANNOTATIONS_TABLE = f"{iam_username}_annotations"
 
   # Use this email address to send email via SES
-  MAIL_DEFAULT_SENDER = "<CNetID>@ucmpcs.org"
+  MAIL_DEFAULT_SENDER = f"{iam_username}@ucmpcs.org"
 
   # Time before free user results are archived (in seconds)
   FREE_USER_DATA_RETENTION = 300
