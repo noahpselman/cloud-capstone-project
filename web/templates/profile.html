@@ -48,7 +48,6 @@ University of Chicago
       <p><strong>Current Plan</strong>: 
         {% if session['role'] == "free_user" %}
         Free &middot; <a href="{{url_for('subscribe')}}">ugrade to Premium plan</a>
-        &nbsp;&nbsp;<a href="{{url_for('make_me_premium')}}">just make me Premium</a>
         {% else %}
         Premium &middot; <a href="{{url_for('unsubscribe')}}">downgrade to Free plan</a>
         {% endif %}
@@ -56,7 +55,7 @@ University of Chicago
 
       <br />
       <div class="form-group">
-        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="submit" class="btn btn-primary">Save</button>&nbsp;&nbsp;<small><a href="{{url_for('make_me_premium')}}">just make me Premium</a></small>
       </div>
     </form>
 
