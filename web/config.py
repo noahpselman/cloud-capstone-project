@@ -16,7 +16,7 @@ from botocore.exceptions import ClientError
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# Get the IAM username that was stashed at alunch time
+# Get the IAM username that was stashed at launch time
 with open('/home/ubuntu/.launch_user', 'r') as file:
   iam_username = file.read().replace('\n', '')
 
