@@ -140,6 +140,7 @@ def annotation_log(id):
 """Subscription management handler
 """
 import stripe
+from auth import update_profile
 
 @app.route('/subscribe', methods=['GET', 'POST'])
 @authenticated
