@@ -1,0 +1,74 @@
+<!--
+annotate.html - Direct upload to Amazon S3 using signed POST request
+Copyright (C) 2011-2018 Vas Vasiliadis <vas@uchicago.edu>
+University of Chicago
+-->
+
+{% extends "base.html" %}
+
+{% block title %}Annotate{% endblock %}
+
+{% block body %}
+
+  {% include "header.html" %}
+
+  <div class="container">
+    
+    <div class="page-header">
+      <h1>Annotate VCF File</h1>
+    </div>
+
+  	<div class="form-wrapper">
+      <form role="form" action="{{ s3_post.url }}" method="post" enctype="multipart/form-data">
+        {% for key, value in s3_post.fields.items() %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}" />
+        {% endfor %}
+
+        <div class="row">
+          <div class="form-group col-md-6">
+            <label for="upload">Select VCF Input File</label>
+            <div class="input-group col-md-12">
+              <span class="input-group-btn">
+                <span class="btn btn-default btn-file btn-lg">Browse&hellip; <input type="file" name="file" id="upload-file" /></span>
+              </span>
+              <input type="text" class="form-control col-md-6 input-lg" readonly />
+            </div>
+          </div>
+        </div>
+
+        <br />
+  			<div class="form-actions">
+  				<input class="btn btn-lg btn-primary" type="submit" value="Annotate" id="annotateButton" />
+  			</div>
+      </form>
+    </div>
+
+    <script>
+    // Prevent input files larger than 150K for free users
+    var uploadField = document.getElementById("upload-file");
+    var user_type = "{{ role }}"
+
+    uploadField.onchange = function() {
+      
+      var fileSize = this.files[0].size/1000;
+
+      if (fileSize > 150 && user_type === "free_user") {
+        alert("The input file size limit for free users is 150KB; please subscribe to continue.");
+        this.value = "";
+        
+        // Offer the user in-place upgrade
+        var div = document.getElementById("upgrade");
+        if (div.childNodes.length == 0) {
+          var upgrade_link = document.createElement("A");
+          var upgrade_text = document.createTextNode("Upgrade to Premium");
+          upgrade_link.setAttribute("href", "{{ url_for('subscribe') }}");
+          upgrade_link.appendChild(upgrade_text);
+          div.appendChild(upgrade_link);
+        }
+
+      };
+    };
+    </script>
+    
+  </div>
+{% endblock %}
