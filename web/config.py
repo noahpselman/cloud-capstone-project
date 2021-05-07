@@ -17,8 +17,16 @@ from botocore.exceptions import ClientError
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 # Get the IAM username that was stashed at launch time
-with open('/home/ubuntu/.launch_user', 'r') as file:
-  iam_username = file.read().replace('\n', '')
+try:
+  with open('/home/ubuntu/.launch_user', 'r') as file:
+    iam_username = file.read().replace('\n', '')
+except FileNotFoundError as e:
+  if ('LAUNCH_USER' in  os.environ):
+    iam_username = os.environ['LAUNCH_USER']
+  else:
+    # Unable to set username, so exit
+    print("Unable to find launch user name in local file or environment!")
+    raise e
 
 class Config(object):  
   GAS_LOG_LEVEL = os.environ['GAS_LOG_LEVEL'] \
