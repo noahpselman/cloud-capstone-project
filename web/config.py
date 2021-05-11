@@ -112,7 +112,7 @@ class Config(object):
   AWS_S3_RESULTS_BUCKET = "gas-results"
   # Set the S3 key (object name) prefix to your CNetID
   # Keep the trailing '/' if using my upload code in views.py
-  AWS_S3_KEY_PREFIX = f"{iam_username}/"
+  AWS_S3_KEY_PREFIX = f"{iam_username}"
   AWS_S3_ACL = "private"
   AWS_S3_ENCRYPTION = "AES256"
 
@@ -123,7 +123,7 @@ class Config(object):
     f"arn:aws:sns:us-east-1:127134666975:{iam_username}_job_requests"
 
   # AWS SQS queues
-  AWS_SQS_REQUESTS_QUEUE_NAME = ""
+  AWS_SQS_REQUESTS_QUEUE_NAME = f"{iam_username}_jobs_requests"
 
   # AWS DynamoDB table
   AWS_DYNAMODB_ANNOTATIONS_TABLE = f"{iam_username}_annotations"
