@@ -6,21 +6,48 @@ University of Chicago
 {% extends "base.html" %}
 {% block title %}Annotations{% endblock %}
 {% block body %}
-  {% include "header.html" %}
-  <div class="container">
-    <div class="page-header">
-      <h1>My Annotations</h1>
-    </div>
+{% include "header.html" %}
+<div class="container">
+  <div class="page-header">
+    <h1>My Annotations</h1>
+  </div>
 
-    <div class="row text-right">
-      <a href="{{ url_for('annotate') }}" title="Request New Annotation">
-        <button type="button" class="btn btn-link" aria-label="Request New Annotation">
-          <i class="fa fa-plus fa-lg"></i> Request New Annotation
-        </button>
-      </a>
-    </div>
+  <div class="row text-right">
+    <a href="{{ url_for('annotate') }}" title="Request New Annotation">
+      <button type="button" class="btn btn-link" aria-label="Request New Annotation">
+        <i class="fa fa-plus fa-lg"></i> Request New Annotation
+      </button>
+    </a>
+  </div>
 
-    <!-- DISPLAY LIST OF ANNOTATION JOBS -->
+  <div class=row>
+    <table>
+      <tr>
+        <th class='col-md-3'>Request ID</th>
+        <th class='col-md-3'>Request Time</th>
+        <th class='col-md-3'>VCF File Name</th>
+        <th class='col-md-3'>Status</th>
+      </tr>
+      {% for ann in annotations %}
+      <tr>
+        <td>
+          <a href="{{request.base_url+'/'+ann['job_id']}}">
+            {{ann['job_id']}}
+          </a>
+        </td>
+        <td>
+            {{ann['submit_time']}}
+        </td>
+        <td>
+            {{ann['input_file_name']}}
+        </td>
+        <td>
+            {{ann['job_status']}}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
 
-  </div> <!-- container -->
+</div> <!-- container -->
 {% endblock %}
