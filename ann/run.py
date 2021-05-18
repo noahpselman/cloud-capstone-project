@@ -15,6 +15,7 @@ import sys
 import boto3
 import os
 import json
+import uuid
 from shutil import rmtree
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -25,9 +26,12 @@ config = ConfigParser(os.environ)
 config.read('config.ini')
 
 REGION = config['aws']['AwsRegionName']
+SIG_VERSION = config['aws']['SignatureVersion']
 ANNTOOLS_PATH = config['local']['AnnTools']
 DYNAMO_TABLENAME = config['aws']['DynamoTablename']
 RESULTS_SNS = config['aws']['ResultsTopicARN']
+STEP_FUNCTION = config['aws']['StepFunctionArchive']
+GAS_URL = config['gas']['GASurl']
 sys.path.append(ANNTOOLS_PATH)
 
 import driver
@@ -70,8 +74,8 @@ if __name__ == '__main__':
 
 			# put files in gas-results
 			s3_client = boto3.client('s3', 
-																region_name='us-east-1', 
-																config=Config(signature_version='s3v4'))
+									 region_name=REGION, 
+									 config=Config(signature_version=SIG_VERSION))
 			
 			for f in (log_filename, annot_filename):
 				with open(f'{OUTPUT_DIR}/{user_id}/{job_id}/{f}', 'rb') as content:
@@ -95,7 +99,8 @@ if __name__ == '__main__':
 				"complete_time": {"N": str(time.time())},
 				"s3_results_bucket": {"S": OUTPUT_BUCKET},
 				"s3_key_log_file": {"S": f"{OUTPUT_KEY_ROOT}/{user_id}/{log_filename}"},
-				"s3_key_result_file": {"S": f"{OUTPUT_KEY_ROOT}/{user_id}/{annot_filename}"}
+				"s3_key_result_file": {"S": f"{OUTPUT_KEY_ROOT}/{user_id}/{annot_filename}"},
+				"archive_status": {"S": "NOT_ARCHIVED"}
 			}
 
 			expression_items = []
@@ -124,17 +129,52 @@ if __name__ == '__main__':
 				print(f"There was a response with an HTTPStatusCode of {response['ResponseMetadata']['HTTPStatusCode']} after uploading to Dynamo")
 
 			# Send message to request queue
-			message = f"Job {job_id} for user {user_id} has finished.  " + \
-			f"results can be found in the bucket {new_data['s3_results_bucket']} " + \
-			f"with key {OUTPUT_KEY_ROOT}/{user_id}."
+			LINK = f"{GAS_URL}/annotations/{job_id}"
+			message = json.dumps({
+				'user_id': user_id,
+				'job_id': job_id,
+				'link': LINK
+			})
 			try:
 				print("sending to the jobs queue")
 				sns_client = boto3.client("sns", region_name=REGION)
 				sns_response = sns_client.publish(TopicArn=RESULTS_SNS, Message=message)
 			except ClientError as e:
-				print(e)
+				print("problem publishing message to results sns:", e)
+
+			# Execute step function to archive
+			try:
+				attributes = ['user_role', "s3_key_result_file"]
+				response = dynamo_client.get_item(TableName=DYNAMO_TABLENAME,
+									   Key={'job_id': {'S': job_id}},
+									   AttributesToGet=attributes)
+				items = response['Item']
+				user_role = list(items['user_role'].values())[0]
+				s3_key_result_file = list(items['s3_key_result_file'].values())[0]
+			except ClientError as e:
+				print("problem retreving user role:", e)
 
 
+			print("the user role is:", user_role)	
+
+			if user_role == "free_user":
+				message = {
+					"user_id": user_id,
+					"job_id": job_id,
+					"s3_key_result_file": s3_key_result_file
+				}
+				try:
+					step_client = boto3.client('stepfunctions', region_name=REGION)					
+					response = step_client.start_execution(
+						stateMachineArn=STEP_FUNCTION,
+						name=str(uuid.uuid1()),
+						input=json.dumps(message)
+						)
+				except ClientError as e:
+					print('problem starting step function')
+					
+
+			# Remove directory
 			rmtree(f'{OUTPUT_DIR}/{user_id}/{job_id}')
 			if not os.listdir(f'{OUTPUT_DIR}/{user_id}'):
 				rmtree(f'{OUTPUT_DIR}/{user_id}')
