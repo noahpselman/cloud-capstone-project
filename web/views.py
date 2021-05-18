@@ -23,6 +23,7 @@ from flask import (abort, flash, redirect, render_template,
 
 from gas import app, db
 from decorators import authenticated, is_premium
+from auth import get_profile
 
 """Start annotation request
 Create the required AWS S3 policy document and render a form for
@@ -41,6 +42,7 @@ def annotate():
 
 	bucket_name = app.config['AWS_S3_INPUTS_BUCKET']
 	user_id = session['primary_identity']
+
 	print("user_Id", user_id)
 
 	# Generate unique ID to be used as S3 key (name)
@@ -104,6 +106,7 @@ def create_annotation_job_request():
 	# Extract the job ID from the S3 key
 	[key_root, user_id, s3_input_file] = s3_key.split('/')
 	[job_id, input_file_name] = s3_input_file.split('~')
+	profile = get_profile(identity_id=user_id)
 
 
 	# Creating data
@@ -129,10 +132,12 @@ def create_annotation_job_request():
 		return abort(500)
 
 	# Persist job to database
+	dynamo_data['user_email'] = {'S': profile.email}
 	try:
 		dynamo_client = boto3.client("dynamodb", 
 								region_name=region)
-		put_response = dynamo_client.put_item(TableName=app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE'], Item=dynamo_data)
+		put_response = dynamo_client.put_item(TableName=app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE'], 
+											  Item=dynamo_data)
 	except ClientError:
 		print(e)
 		app.logger.error(f'Problem putting data in Dynamo DB: {e}')
@@ -148,9 +153,35 @@ def create_annotation_job_request():
 @authenticated
 def annotations_list():
 
-	# Get list of annotations to display
+	user_id = session['primary_identity']
+	region = app.config['AWS_REGION_NAME']
+	dynamo_table = app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE']
+
+	try:
+		dynamo_client = boto3.client('dynamodb', region_name=region)
+		response = dynamo_client.query(TableName=dynamo_table, 
+							  	       KeyConditions={'user_id': {'AttributeValueList': [{'S': user_id}], 
+											 	  'ComparisonOperator': 'EQ'}}, 
+						   			   IndexName='user_id_index', 
+						   			   AttributesToGet=['job_id', 'submit_time', 'input_file_name', 'job_status'])
+		items = response['Items']
+		# annotations = [{k: list(v.values())[0] for k, v in item.items()} for item in items]
+		annotations = []
+		for item in items:
+			annotation = {k: list(v.values())[0] for k, v in item.items()}
+			annotation['submit_time'] = time.strftime('%Y-%m-%d %H:%M:%S', 
+													  time.localtime(int(float(
+														  annotation['submit_time']))))
+			annotations.append(annotation)
+		print("requested items", annotations)
+		# print("\tuser email retrieved", user_email)
+
+	except ClientError as e:
+		print(e)
+		app.logger.error(f'Problem querying in Dynamo DB: {e}')
+		return abort(500)
 	
-	return render_template('annotations.html', annotations=None)
+	return render_template('annotations.html', annotations=annotations)
 
 
 """Display details of a specific annotation job
@@ -158,15 +189,89 @@ def annotations_list():
 @app.route('/annotations/<id>', methods=['GET'])
 @authenticated
 def annotation_details(id):
-	pass
+	user_id = session['primary_identity']
+	region = app.config['AWS_REGION_NAME']
+	dynamo_table = app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE']
+	input_bucket = app.config['AWS_S3_INPUTS_BUCKET']
+	result_bucket = app.config['AWS_S3_RESULTS_BUCKET']
 
+	attributes = (['job_id', 'submit_time', 'input_file_name', 
+				   'job_status', 'complete_time',  
+				   's3_key_result_file', 's3_key_input_file', 'user_id'])
+
+	try:
+		dynamo_client = boto3.client('dynamodb', region_name=region)
+		response = dynamo_client.get_item(TableName=dynamo_table, 
+							  	       Key={'job_id': {'S': id}}, 
+						   			   AttributesToGet=attributes)
+		item = response['Item']
+		item = {k: list(v.values())[0] for k, v in item.items()}
+		item['submit_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(item['submit_time']))))
+		item['complete_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(item['complete_time']))))
+		print("requested items", item)
+	except ClientError as e:
+		print(e)
+		app.logger.error(f'Problem querying in Dynamo DB: {e}')
+		return abort(500)
+
+	if user_id != item['user_id']:
+		app.logger.error(f"user_id doesn't match: {user_id} != {item['user_id']}")
+		abort(403)
+
+	# get links
+	try:
+		s3_client = boto3.client('s3', region_name=region)
+		input_url = s3_client.generate_presigned_url('get_object', 
+											   Params = {'Bucket': input_bucket, 
+											   			 'Key': item['s3_key_input_file']}, 
+											   ExpiresIn=300)
+		result_url = s3_client.generate_presigned_url('get_object', 
+											   Params = {'Bucket': result_bucket, 
+											   			 'Key': item['s3_key_result_file']}, 
+											   ExpiresIn=300)
+	except ClientError as e:
+		print(e)
+		app.logger.error(f'Problem get links: {e}')
+		return abort(500)
+	return render_template('annotation.html', item=item, input_url=input_url, result_url=result_url)
 
 """Display the log file contents for an annotation job
 """
 @app.route('/annotations/<id>/log', methods=['GET'])
 @authenticated
 def annotation_log(id):
-	pass
+	user_id = session['primary_identity']
+	region = app.config['AWS_REGION_NAME']
+	dynamo_table = app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE']
+	input_bucket = app.config['AWS_S3_INPUTS_BUCKET']
+	result_bucket = app.config['AWS_S3_RESULTS_BUCKET']
+
+	# get log filename
+	try:
+		dynamo_client = boto3.client('dynamodb', region_name=region)
+		response = dynamo_client.get_item(TableName=dynamo_table, 
+							  	       Key={'job_id': {'S': id}}, 
+						   			   AttributesToGet=['s3_key_log_file'])
+		item = response['Item']
+		s3_key_log_file = list(item['s3_key_log_file'].values())[0]
+		print("s3 log file", s3_key_log_file)
+	except ClientError as e:
+		app.logger.error(f'Problem querying Dynamo DB for log file: {e}')
+		return abort(500)
+
+	# get log string
+	try:
+		s3_client = boto3.client('s3', region_name=region)
+		obj = s3_client.get_object(Bucket=result_bucket, 
+								   Key=s3_key_log_file)
+		content = obj['Body'].read().decode('utf-8')
+		# print("s3 object:::::;", content)
+	except ClientError as e:
+		print(e)
+		app.logger.error(f'Problem getting s3 log file: {e}')
+		return abort(500)	
+
+	return render_template('view_log.html', content=content)
 
 
 """Subscription management handler

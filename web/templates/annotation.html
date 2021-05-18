@@ -13,6 +13,28 @@ University of Chicago
       <h1>Annotation Details</h1>
     </div>
 
+
+    <div class=row>
+      <p><b>Request ID: </b> {{item['job_id']}}</p>
+      <p><b>Request Time: </b> {{item['submit_time']}}</p>
+      <p><b>VCF Input File: </b> <a href={{input_url}}>{{item['input_file_name']}}</a></p>
+      <p><b>Status: </b> {{item['job_status']}}</p>
+      {% if item['job_status'] == 'COMPLETED' %}
+      <p><b>Complete Time: </b> {{item['complete_time']}}</p>
+      {% endif %}
+    </div>
+    {% if item['job_status'] == 'COMPLETED' %}
+    <div class=row>
+        <div>
+        <b>Annotated Results File: </b>
+        <a href={{result_url}}> download</a>
+        </div>
+        <div>
+        <b>Annotation Log File: </b>
+        <a href="{{request.base_url+'/log'}}"> view</a>
+        </div>
+    </div>
+    {% endif %}
     <!-- DISPLAY ANNOTATION JOB DETAILS -->
 
     <hr />
