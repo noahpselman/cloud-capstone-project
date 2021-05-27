@@ -18,6 +18,8 @@ from botocore.exceptions import ClientError
 # Import utility helpers
 sys.path.insert(1, os.path.realpath(os.path.pardir))
 import helpers
+# helpers must be imported first to avoid ambiguous file names
+
 
 # Get configuration
 from configparser import ConfigParser
@@ -62,12 +64,13 @@ if __name__ == '__main__':
 
         try:
             response = sqs_client.receive_message(
-                QueueUrl=RESULTS_QUEUE, MaxNumberOfMessages=10, WaitTimeSeconds=20)
+                QueueUrl=RESULTS_QUEUE, MaxNumberOfMessages=1, WaitTimeSeconds=20)
             # print("sqs client response:", response)
         except ClientError as e:
             print("Problem connecting to SQS")
             print(e)
-            raise
+            continue
+   
 
         try:
             messages = response['Messages']
@@ -97,18 +100,20 @@ if __name__ == '__main__':
             # handle_results_queue(sqs=sqs)
 
             # get recipient email
-            try:
-                dynamo_client = boto3.client('dynamodb', region_name=REGION)
-                response = dynamo_client.get_item(TableName=DYNAMO_TABLENAME,
-                                       Key={'job_id': {'S': job_id}},
-                                       AttributesToGet=['user_email'])
-                user_email = list(response['Item']['user_email'].values())[0]
-                print("\tuser email retrieved", user_email)
+            user_email = helpers.get_user_profile(user_id)['email']
+            
+            # try:
+            #     dynamo_client = boto3.client('dynamodb', region_name=REGION)
+            #     response = dynamo_client.get_item(TableName=DYNAMO_TABLENAME,
+            #                            Key={'job_id': {'S': job_id}},
+            #                            AttributesToGet=['user_email'])
+            #     user_email = list(response['Item']['user_email'].values())[0]
 
-            except ClientError as e:
-                print("There fetching email address")
-                print(e)
-                continue
+            # except ClientError as e:
+            #     print("There fetching email address")
+            #     print(e)
+            #     continue
+            print("\tuser email retrieved", user_email)
 
             # send email
             try:

@@ -19,7 +19,16 @@ University of Chicago
       <form role="form" action="{{url_for('subscribe')}}" method="post" id="subscribe_form" name="subscribe_submit">     
         <span class="payment-errors"></span>
 
-        <!-- GET USER CREDIT CARD DETAILS -->
+        <input class="form-control input-lg required" type="text" size="20" 
+        data-stripe="name" />
+        <input class="form-control input-lg required" type="text" size="20" 
+        data-stripe="number" />
+        <input class="form-control input-lg required" type="text" size="20" 
+        data-stripe="cvc" />
+        <input class="form-control input-lg required" type="text" size="20" 
+        data-stripe="exp-month" />
+        <input class="form-control input-lg required" type="text" size="20" 
+        data-stripe="exp-year" />
         
         <br />
         <div class="form-actions">
