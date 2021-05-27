@@ -42,7 +42,7 @@ if __name__ == '__main__':
         # Attempt to read a message from the queue
         # Use long polling - DO NOT use sleep() to wait between polls
         try:
-            response = sqs_client.receive_message(QueueUrl=QUEUE_URL, MaxNumberOfMessages=10, WaitTimeSeconds=20)
+            response = sqs_client.receive_message(QueueUrl=QUEUE_URL, MaxNumberOfMessages=1, WaitTimeSeconds=20)
             # print("sqs client response:", response)
         except ClientError as e:
             print("Problem connecting to SQS")

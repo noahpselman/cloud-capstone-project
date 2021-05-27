@@ -19,6 +19,7 @@ import uuid
 from shutil import rmtree
 from botocore.config import Config
 from botocore.exceptions import ClientError
+# from auth import get_profile
 
 # Get configuration
 from configparser import ConfigParser
@@ -93,13 +94,14 @@ if __name__ == '__main__':
 					else:
 						print(f"the following file was not found after the analysis and thus not moved to the s3: {f}")
 					
+			results_file = f"{OUTPUT_KEY_ROOT}/{user_id}/{annot_filename}"
 			# update dynamo
 			new_data = {
 				"job_status": {"S": "COMPLETED"} ,
 				"complete_time": {"N": str(time.time())},
 				"s3_results_bucket": {"S": OUTPUT_BUCKET},
 				"s3_key_log_file": {"S": f"{OUTPUT_KEY_ROOT}/{user_id}/{log_filename}"},
-				"s3_key_result_file": {"S": f"{OUTPUT_KEY_ROOT}/{user_id}/{annot_filename}"},
+				"s3_key_result_file": {"S": results_file},
 				"archive_status": {"S": "NOT_ARCHIVED"}
 			}
 
@@ -143,35 +145,36 @@ if __name__ == '__main__':
 				print("problem publishing message to results sns:", e)
 
 			# Execute step function to archive
+			# try:
+			# 	attributes = ['user_role', "s3_key_result_file"]
+			# 	response = dynamo_client.get_item(TableName=DYNAMO_TABLENAME,
+			# 						   Key={'job_id': {'S': job_id}},
+			# 						   AttributesToGet=attributes)
+			# 	items = response['Item']
+			# 	user_role = list(items['user_role'].values())[0]
+			# 	s3_key_result_file = list(items['s3_key_result_file'].values())[0]
+			# except ClientError as e:
+			# 	print("problem retreving user role:", e)
+
+			# profile = get_profile(user_id)
+			# user_role = profile.role
+			# print("the user role is:", user_role)	
+
+			# if user_role == "free_user":
+			message = {
+				"user_id": user_id,
+				"job_id": job_id,
+				"s3_key_result_file": results_file
+			}
 			try:
-				attributes = ['user_role', "s3_key_result_file"]
-				response = dynamo_client.get_item(TableName=DYNAMO_TABLENAME,
-									   Key={'job_id': {'S': job_id}},
-									   AttributesToGet=attributes)
-				items = response['Item']
-				user_role = list(items['user_role'].values())[0]
-				s3_key_result_file = list(items['s3_key_result_file'].values())[0]
+				step_client = boto3.client('stepfunctions', region_name=REGION)					
+				response = step_client.start_execution(
+					stateMachineArn=STEP_FUNCTION,
+					name=str(uuid.uuid1()),
+					input=json.dumps(message)
+					)
 			except ClientError as e:
-				print("problem retreving user role:", e)
-
-
-			print("the user role is:", user_role)	
-
-			if user_role == "free_user":
-				message = {
-					"user_id": user_id,
-					"job_id": job_id,
-					"s3_key_result_file": s3_key_result_file
-				}
-				try:
-					step_client = boto3.client('stepfunctions', region_name=REGION)					
-					response = step_client.start_execution(
-						stateMachineArn=STEP_FUNCTION,
-						name=str(uuid.uuid1()),
-						input=json.dumps(message)
-						)
-				except ClientError as e:
-					print('problem starting step function')
+				print('problem starting step function')
 					
 
 			# Remove directory
