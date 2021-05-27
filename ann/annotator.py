@@ -12,8 +12,6 @@ from configparser import ConfigParser
 config = ConfigParser(os.environ)
 config.read('config.ini')
 
-# ROOT = config['local']['RootDirectory']
-# QUEUE_URL = "https://sqs.us-east-1.amazonaws.com/127134666975/nselman_job_requests"
 REGION = config['aws']['AwsRegionName']
 QUEUE_URL = config['aws']['JobsQueueUrl']
 DYNAMO_TABLENAME = config['aws']['DynamoTablename']
@@ -44,7 +42,7 @@ if __name__ == '__main__':
         # Attempt to read a message from the queue
         # Use long polling - DO NOT use sleep() to wait between polls
         try:
-            response = sqs_client.receive_message(QueueUrl=QUEUE_URL, MaxNumberOfMessages=10, WaitTimeSeconds=20)
+            response = sqs_client.receive_message(QueueUrl=QUEUE_URL, MaxNumberOfMessages=1, WaitTimeSeconds=20)
             # print("sqs client response:", response)
         except ClientError as e:
             print("Problem connecting to SQS")
@@ -64,9 +62,6 @@ if __name__ == '__main__':
             body = json.loads(message['Body'])
             content = json.loads(body['Message'])
             # print(content)
-
-            ### need a way to make sure that we haven't already processed the message 
-            ### maybe this is taken care of by deleting the message from the queue
 
             # Extract Parameters from message
             job_id = content['job_id']
@@ -119,6 +114,7 @@ if __name__ == '__main__':
 
 
             # update dynamo db
+            print("updating dynamo with ", job_id)
             update_expression = "SET job_status = :new_job_status"
             expression_vals = {":new_job_status": {"S": "RUNNING"}, ":pending": {"S": "PENDING"}}
             condtion_expression = "job_status = :pending"

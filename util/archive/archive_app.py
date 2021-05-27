@@ -10,8 +10,13 @@ __author__ = 'Vas Vasiliadis <vas@uchicago.edu>'
 import json
 import os
 import uuid
+import sys
 import boto3
 from botocore.exceptions import ClientError
+
+# Import utility helpers
+sys.path.insert(1, os.path.realpath(os.path.pardir))
+import helpers
 
 from flask import Flask, request, abort, render_template
 
@@ -49,7 +54,7 @@ def archive_free_user_data():
 	try:
 		response = sqs_client.receive_message(
 		QueueUrl=app.config['AWS_ARCHIVE_MESSAGE_QUEUE'], 
-		MaxNumberOfMessages=1, 
+		MaxNumberOfMessages=10, 
 		WaitTimeSeconds=20)
 	except ClientError:
 		print("Problem receiving messages")
@@ -62,53 +67,60 @@ def archive_free_user_data():
 		print(f"no messages found:", e)
 		return abort(500)
 
-	sqs_message_id = body['MessageId']
-	if message_id != sqs_message_id:
-		print("message doesn't match")
-		return abort(500)
+	# sqs_message_id = body['MessageId']
+	# if message_id != sqs_message_id:
+	# 	print("message doesn't match")
+	# 	return abort(500)
 
 	# extract data
+
 	job_id = content['job_id']
 	user_id = content['user_id']
 	s3_key_result_file = content['s3_key_result_file']
 
-	# get s3
-	try:
-		s3_client = boto3.client('s3', region_name=app.config['AWS_REGION_NAME'])
-		obj = s3_client.get_object(Bucket=app.config['AWS_S3_RESULTS_BUCKET'], 
-								   Key=s3_key_result_file)
-		content = obj['Body'].read()
-	except ClientError as e:
-		return abort(500)
 
-	# archive to dynamo
-	try:
-		glacier_client = boto3.client('glacier', region_name=app.config['AWS_REGION_NAME'])
-		response = glacier_client.upload_archive(vaultName=app.config['AWS_VAULT_NAME'],
-									  body=content)
-		archive_id = response['archiveId']
-		print("glacier response", response)
-	except ClientError as e:
-		print("Problem uploading to glacier", e)
-		return abort(500)
+	user_role = helpers.get_user_profile(user_id)['role']
+	print("user role is", user_role)
 
-	# upload glacier id to dynamo
-	print("updating dynamo with ", job_id)
-	update_expression = "SET archive_status = :new_archive_status, archive_id = :new_archive_id"
-	expression_vals = {":new_archive_id": {"S": archive_id}, 
-					   ":not_archived": {"S": "NOT_ARCHIVED"},
-					   ":new_archive_status": {'S': 'ARCHIVED'}}
-	condtion_expression = "archive_status = :not_archived"
-	try:
-		dynamo_client = boto3.client('dynamodb', region_name=app.config['AWS_REGION_NAME'])
-		response = dynamo_client.update_item(TableName=app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE'], 
-												Key={'job_id': {'S': job_id}}, 
-												UpdateExpression=update_expression,
-												ExpressionAttributeValues=expression_vals,
-												ConditionExpression=condtion_expression)
-	except ClientError as e:
-		print("There was an issue uploading the results to the Dynamo Table:", e)
-		return abort(500)
+	if user_role == 'free_user':
+
+		# get s3
+		try:
+			s3_client = boto3.client('s3', region_name=app.config['AWS_REGION_NAME'])
+			obj = s3_client.get_object(Bucket=app.config['AWS_S3_RESULTS_BUCKET'], 
+									Key=s3_key_result_file)
+			content = obj['Body'].read()
+		except ClientError as e:
+			return abort(500)
+
+		# archive to dynamo
+		try:
+			glacier_client = boto3.client('glacier', region_name=app.config['AWS_REGION_NAME'])
+			response = glacier_client.upload_archive(vaultName=app.config['AWS_VAULT_NAME'],
+										body=content)
+			archive_id = response['archiveId']
+			print("glacier response", response)
+		except ClientError as e:
+			print("Problem uploading to glacier", e)
+			return abort(500)
+
+		# upload glacier id to dynamo
+		print("updating dynamo with ", job_id)
+		update_expression = "SET archive_status = :new_archive_status, archive_id = :new_archive_id"
+		expression_vals = {":new_archive_id": {"S": archive_id}, 
+						":not_archived": {"S": "NOT_ARCHIVED"},
+						":new_archive_status": {'S': 'ARCHIVED'}}
+		condtion_expression = "archive_status = :not_archived"
+		try:
+			dynamo_client = boto3.client('dynamodb', region_name=app.config['AWS_REGION_NAME'])
+			response = dynamo_client.update_item(TableName=app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE'], 
+													Key={'job_id': {'S': job_id}}, 
+													UpdateExpression=update_expression,
+													ExpressionAttributeValues=expression_vals,
+													ConditionExpression=condtion_expression)
+		except ClientError as e:
+			print("There was an issue uploading the results to the Dynamo Table:", e)
+			return abort(500)
 
 	# delete s3 object
 	try:
