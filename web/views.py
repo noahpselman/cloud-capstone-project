@@ -109,7 +109,7 @@ def create_annotation_job_request():
 	profile = get_profile(identity_id=user_id)
 
 
-	# Creating data
+	# Creating data (defined here because very similar to message data)
 	dynamo_data = { 
 		"job_id": {'S': job_id},
 		"user_id": {'S': user_id},
@@ -122,7 +122,7 @@ def create_annotation_job_request():
 	
 	message_data = {k: list(v.values())[0] for (k, v) in dynamo_data.items()}
 
-	# Send message to request queue
+	# Notify request queue
 	try:
 		sns_client = boto3.client("sns", region_name=region)
 		sns_response = sns_client.publish(TopicArn=app.config['AWS_SNS_JOB_REQUEST_TOPIC'], Message=json.dumps(message_data))
@@ -133,6 +133,7 @@ def create_annotation_job_request():
 
 	# Persist job to database
 	dynamo_data['user_email'] = {'S': profile.email}
+	dynamo_data['user_role'] = {'S': profile.role}
 	try:
 		dynamo_client = boto3.client("dynamodb", 
 								region_name=region)
