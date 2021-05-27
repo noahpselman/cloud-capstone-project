@@ -100,9 +100,9 @@ class Config(object):
   # ************************************************************************
 
   # Stripe
-  STRIPE_PUBLIC_KEY = ""
-  STRIPE_SECRET_KEY = ""
-  STRIPE_PRICE_ID = ""
+  STRIPE_PUBLIC_KEY = "pk_test_51IvWdyFa0tLgQOS9Tjma4PZ4rth8mW9VN5fgefQtgGMKB4ib3A258FBtzdPTJN3G4sUxR0OOZZkesFRi17YHuFZm00FvnxdwQJ"
+  STRIPE_SECRET_KEY = "sk_test_51IvWdyFa0tLgQOS9z5939GASxYeplSmKsebQB2blr4ul4MUZYy6m287jOek2ZZf9kYJxOD6ce3dpGbs74N5f7T45006dcLDdw1"
+  STRIPE_PRICE_ID = "prod_JYe0w0rSvbGbQ6"
 
   # Set validity of pre-signed POST requests (in seconds)
   AWS_SIGNED_REQUEST_EXPIRATION = 60
