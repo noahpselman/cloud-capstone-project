@@ -35,7 +35,6 @@ but you can replace the code below with your own if you prefer.
 @app.route('/annotate', methods=['GET'])
 @authenticated
 def annotate():
-	# Open a connection to the S3 service
 	s3 = boto3.client('s3', 
 		region_name=app.config['AWS_REGION_NAME'], 
 		config=Config(signature_version='s3v4'))
@@ -132,8 +131,8 @@ def create_annotation_job_request():
 		return abort(500)
 
 	# Persist job to database
-	dynamo_data['user_email'] = {'S': profile.email}
-	dynamo_data['user_role'] = {'S': profile.role}
+	# dynamo_data['user_email'] = {'S': profile.email}
+	# dynamo_data['user_role'] = {'S': profile.role}
 	try:
 		dynamo_client = boto3.client("dynamodb", 
 								region_name=region)
