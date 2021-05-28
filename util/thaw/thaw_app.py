@@ -19,10 +19,10 @@ app.url_map.strict_slashes = False
 
 @app.route('/', methods=['GET'])
 def home():
-  return (f"This is the Thaw utility: POST requests to /thaw.")
+	return (f"This is the Thaw utility: POST requests to /thaw.")
 
 @app.route('/thaw', methods=['POST'])
 def thaw_premium_user_data():
-  pass
+	print("thaw endpoint it")
 
 ### EOF
