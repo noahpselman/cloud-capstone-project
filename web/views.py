@@ -25,6 +25,8 @@ from gas import app, db
 from decorators import authenticated, is_premium
 from auth import get_profile
 
+import stripe
+
 """Start annotation request
 Create the required AWS S3 policy document and render a form for
 uploading an annotation input file using the policy document
@@ -35,15 +37,12 @@ but you can replace the code below with your own if you prefer.
 @app.route('/annotate', methods=['GET'])
 @authenticated
 def annotate():
-	# Open a connection to the S3 service
-	s3 = boto3.client('s3', 
-		region_name=app.config['AWS_REGION_NAME'], 
-		config=Config(signature_version='s3v4'))
+	
 
 	bucket_name = app.config['AWS_S3_INPUTS_BUCKET']
 	user_id = session['primary_identity']
 
-	print("user_Id", user_id)
+	# print("user_Id", user_id)
 
 	# Generate unique ID to be used as S3 key (name)
 	job_id = str(uuid.uuid4())
@@ -68,6 +67,10 @@ def annotate():
 
 	# Generate the presigned POST call
 	try:
+		s3 = boto3.client('s3', 
+			region_name=app.config['AWS_REGION_NAME'], 
+			config=Config(signature_version='s3v4'))
+
 		presigned_post = s3.generate_presigned_post(
 			Bucket=bucket_name, 
 			Key=key_name,
@@ -96,12 +99,9 @@ homework assignments
 @authenticated
 def create_annotation_job_request():
 
-	region = app.config['AWS_REGION_NAME']
-
 	# Parse redirect URL query parameters for S3 object info
 	bucket_name = request.args.get('bucket')
 	s3_key = request.args.get('key')
-	print(s3_key)
 
 	# Extract the job ID from the S3 key
 	[key_root, user_id, s3_input_file] = s3_key.split('/')
@@ -124,26 +124,25 @@ def create_annotation_job_request():
 
 	# Notify request queue
 	try:
-		sns_client = boto3.client("sns", region_name=region)
+		print("Publishing notification to request job")
+		sns_client = boto3.client("sns", region_name=app.config['AWS_REGION_NAME'])
 		sns_response = sns_client.publish(TopicArn=app.config['AWS_SNS_JOB_REQUEST_TOPIC'], Message=json.dumps(message_data))
 	except ClientError as e:
-		print(e)
+		print("Failed to publish notification:", e)
 		app.logger.error(f'Problem publishing SNS message: {e}')
 		return abort(500)
 
-	# Persist job to database
-	dynamo_data['user_email'] = {'S': profile.email}
-	dynamo_data['user_role'] = {'S': profile.role}
+	# Put item in Dynamo
 	try:
+		print("Putting job in Dynamo table...")
 		dynamo_client = boto3.client("dynamodb", 
-								region_name=region)
+								region_name=app.config['AWS_REGION_NAME'])
 		put_response = dynamo_client.put_item(TableName=app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE'], 
 											  Item=dynamo_data)
 	except ClientError:
-		print(e)
+		print("Failed to put item in Dynamo table", e)
 		app.logger.error(f'Problem putting data in Dynamo DB: {e}')
 		return abort(500)
-
 
 	return render_template('annotate_confirm.html', job_id=job_id)
 
@@ -155,18 +154,17 @@ def create_annotation_job_request():
 def annotations_list():
 
 	user_id = session['primary_identity']
-	region = app.config['AWS_REGION_NAME']
-	dynamo_table = app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE']
 
+	# Query Dynamo for Jobs
 	try:
-		dynamo_client = boto3.client('dynamodb', region_name=region)
-		response = dynamo_client.query(TableName=dynamo_table, 
+		print("Querying Dynamo for jobs...")
+		dynamo_client = boto3.client('dynamodb', region_name=app.config['AWS_REGION_NAME'])
+		response = dynamo_client.query(TableName=app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE'], 
 							  	       KeyConditions={'user_id': {'AttributeValueList': [{'S': user_id}], 
 											 	  'ComparisonOperator': 'EQ'}}, 
 						   			   IndexName='user_id_index', 
 						   			   AttributesToGet=['job_id', 'submit_time', 'input_file_name', 'job_status'])
 		items = response['Items']
-		# annotations = [{k: list(v.values())[0] for k, v in item.items()} for item in items]
 		annotations = []
 		for item in items:
 			annotation = {k: list(v.values())[0] for k, v in item.items()}
@@ -174,11 +172,9 @@ def annotations_list():
 													  time.localtime(int(float(
 														  annotation['submit_time']))))
 			annotations.append(annotation)
-		print("requested items", annotations)
-		# print("\tuser email retrieved", user_email)
 
 	except ClientError as e:
-		print(e)
+		print("Failed to get jobs from Dynamo:", e)
 		app.logger.error(f'Problem querying in Dynamo DB: {e}')
 		return abort(500)
 	
@@ -191,8 +187,6 @@ def annotations_list():
 @authenticated
 def annotation_details(id):
 	user_id = session['primary_identity']
-	region = app.config['AWS_REGION_NAME']
-	dynamo_table = app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE']
 	input_bucket = app.config['AWS_S3_INPUTS_BUCKET']
 	result_bucket = app.config['AWS_S3_RESULTS_BUCKET']
 
@@ -201,27 +195,28 @@ def annotation_details(id):
 				   's3_key_result_file', 's3_key_input_file', 'user_id'])
 
 	try:
-		dynamo_client = boto3.client('dynamodb', region_name=region)
-		response = dynamo_client.get_item(TableName=dynamo_table, 
+		print("Getting job from Dynamo")
+		dynamo_client = boto3.client('dynamodb', region_name=app.config['AWS_REGION_NAME'])
+		response = dynamo_client.get_item(TableName=app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE'], 
 							  	       Key={'job_id': {'S': id}}, 
 						   			   AttributesToGet=attributes)
 		item = response['Item']
 		item = {k: list(v.values())[0] for k, v in item.items()}
 		item['submit_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(item['submit_time']))))
 		item['complete_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(item['complete_time']))))
-		print("requested items", item)
 	except ClientError as e:
-		print(e)
+		print("Failed to get job from Dynamo:", e)
 		app.logger.error(f'Problem querying in Dynamo DB: {e}')
 		return abort(500)
 
 	if user_id != item['user_id']:
+		print("Verifying job begins to user...")
 		app.logger.error(f"user_id doesn't match: {user_id} != {item['user_id']}")
 		abort(403)
 
 	# get links
 	try:
-		s3_client = boto3.client('s3', region_name=region)
+		s3_client = boto3.client('s3', region_name=app.config['AWS_REGION_NAME'])
 		input_url = s3_client.generate_presigned_url('get_object', 
 											   Params = {'Bucket': input_bucket, 
 											   			 'Key': item['s3_key_input_file']}, 
@@ -242,33 +237,31 @@ def annotation_details(id):
 @authenticated
 def annotation_log(id):
 	user_id = session['primary_identity']
-	region = app.config['AWS_REGION_NAME']
-	dynamo_table = app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE']
-	input_bucket = app.config['AWS_S3_INPUTS_BUCKET']
 	result_bucket = app.config['AWS_S3_RESULTS_BUCKET']
 
 	# get log filename
 	try:
-		dynamo_client = boto3.client('dynamodb', region_name=region)
-		response = dynamo_client.get_item(TableName=dynamo_table, 
+		print("Getting log file key from Dynamo...")
+		dynamo_client = boto3.client('dynamodb', region_name=app.config['AWS_REGION_NAME'])
+		response = dynamo_client.get_item(TableName=app.config['AWS_DYNAMODB_ANNOTATIONS_TABLE'], 
 							  	       Key={'job_id': {'S': id}}, 
 						   			   AttributesToGet=['s3_key_log_file'])
 		item = response['Item']
 		s3_key_log_file = list(item['s3_key_log_file'].values())[0]
-		print("s3 log file", s3_key_log_file)
 	except ClientError as e:
+		print("Failed to get log file key from Dynamo:", e)
 		app.logger.error(f'Problem querying Dynamo DB for log file: {e}')
 		return abort(500)
 
 	# get log string
 	try:
-		s3_client = boto3.client('s3', region_name=region)
-		obj = s3_client.get_object(Bucket=result_bucket, 
+		print("Getting log file from s3...")
+		s3_client = boto3.client('s3', region_name=app.config['AWS_REGION_NAME'])
+		obj = s3_client.get_object(Bucket=app.config['AWS_S3_RESULTS_BUCKET'], 
 								   Key=s3_key_log_file)
 		content = obj['Body'].read().decode('utf-8')
-		# print("s3 object:::::;", content)
 	except ClientError as e:
-		print(e)
+		print("Failed to get log file:", e)
 		app.logger.error(f'Problem getting s3 log file: {e}')
 		return abort(500)	
 
@@ -285,25 +278,62 @@ from auth import update_profile
 def subscribe():
 	if (request.method == 'GET'):
 		# Display form to get subscriber credit card info
-		pass
+		return render_template('subscribe.html')
 		
 	elif (request.method == 'POST'):
 		# Process the subscription request
+		stripe_token = request.form['stripe_token']
+		stripe.api_key = app.config['STRIPE_SECRET_KEY']
 
 		# Create a customer on Stripe
-
+		try:
+			print("Creating stripe customer...")
+			response = stripe.Customer.create(
+				name=session['name'],
+				email=session['email'],
+				card=stripe_token
+			)
+			customer_id = response['id']
+		except stripe.error as e:
+			print("Failed to create stripe customer:", e)
+			return abort(500)
+			
 		# Subscribe customer to pricing plan
-
+		try:
+			print("Subscribing customer to pricing plan...")
+			response = stripe.Subscription.create(
+				customer=customer_id,
+				items=[{"price": app.config['STRIPE_PRICE_ID']}]
+			)
+		except stripe.error as e:
+			print("There was a problem subcribing:", e)
+			return abort(400)
+			
 		# Update user role in accounts database
+		update_profile(
+			identity_id=session['primary_identity'],
+			role="premium_user")
 
 		# Update role in the session
+		session['role'] = "premium_user"
 
-		# Request restoration of the user's data from Glacier
-		# ...add code here to initiate restoration of archived user data
-		# ...and make sure you handle files not yet archived!
+		# Initiate retrieval
+		message_data = {
+			'user_id': session['primary_identity']
+		}
+		try:
+			print("Publishing sns to thaw topic...")
+			sns_client = boto3.client("sns", region_name=app.config['AWS_REGION_NAME'])
+			sns_response = sns_client.publish(
+				TopicArn=app.config['AWS_SNS_THAW_TOPIC'], 
+				Message=json.dumps(message_data))
+		except ClientError as e:
+			print("Failed to publish notification:", e)
+			app.logger.error(f'Problem publishing SNS message: {e}')
+			return abort(500)
 
 		# Display confirmation page
-		pass
+		return render_template('subscribe_confirm.html')
 
 
 """Set premium_user role

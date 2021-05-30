@@ -27,11 +27,15 @@ University of Chicago
     <div class=row>
         <div>
         <b>Annotated Results File: </b>
+        {% if session['role'] == 'premium_user' %}
         <a href={{result_url}}> download</a>
+        {% elif session['role'] == 'free_user' %}
+        <a href="{{request.url_root + '/subscribe'}}"> upgrade to Premium for download</a>
+        {% endif %}
         </div>
         <div>
         <b>Annotation Log File: </b>
-        <a href="{{request.base_url+'/log'}}"> view</a>
+        <a href="{{request.base_url + '/log'}}"> view</a>
         </div>
     </div>
     {% endif %}

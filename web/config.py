@@ -102,7 +102,8 @@ class Config(object):
   # Stripe
   STRIPE_PUBLIC_KEY = "pk_test_51IvWdyFa0tLgQOS9Tjma4PZ4rth8mW9VN5fgefQtgGMKB4ib3A258FBtzdPTJN3G4sUxR0OOZZkesFRi17YHuFZm00FvnxdwQJ"
   STRIPE_SECRET_KEY = "sk_test_51IvWdyFa0tLgQOS9z5939GASxYeplSmKsebQB2blr4ul4MUZYy6m287jOek2ZZf9kYJxOD6ce3dpGbs74N5f7T45006dcLDdw1"
-  STRIPE_PRICE_ID = "prod_JYe0w0rSvbGbQ6"
+  STRIPE_PRICE_ID = "price_1IvYZRFa0tLgQOS9HdFuGXzO"
+  STRIPE_PROD_ID = "prod_JYe0w0rSvbGbQ6"
 
   # Set validity of pre-signed POST requests (in seconds)
   AWS_SIGNED_REQUEST_EXPIRATION = 60
@@ -121,9 +122,12 @@ class Config(object):
   # AWS SNS topics
   AWS_SNS_JOB_REQUEST_TOPIC = \
     f"arn:aws:sns:us-east-1:127134666975:{iam_username}_job_requests"
+  AWS_SNS_THAW_TOPIC = \
+    f"arn:aws:sns:us-east-1:127134666975:{iam_username}_thaw"
 
   # AWS SQS queues
   AWS_SQS_REQUESTS_QUEUE_NAME = f"{iam_username}_jobs_requests"
+  AWS_SQS_THAW_QUEUE_NAME = f"{iam_username}_thaw"
 
   # AWS DynamoDB table
   AWS_DYNAMODB_ANNOTATIONS_TABLE = f"{iam_username}_annotations"
