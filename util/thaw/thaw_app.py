@@ -156,6 +156,7 @@ def thaw_premium_user_data():
 				except ClientError as e:
 					print('There was an error retriving archive:', e)
 					print("Skipping...")
+					continue
 
 			# update dynamo
 			print("Updating Dynamo table with restore job id...")
@@ -180,7 +181,7 @@ def thaw_premium_user_data():
 		# delete message
 		delete_message(sqs_client, receipt_handle)
 
-		return 200
+	return "Success", 201
 
 def delete_message(sqs_client, receipt_handle):
 	try:
@@ -196,19 +197,20 @@ def delete_message(sqs_client, receipt_handle):
 
 @app.errorhandler(403)
 def forbidden(e):
-	return render_template('error.html',
-		title='Not authorized', alert_level='danger',
-		message="You are not authorized to access this page. \
+	return {
+		'error': 'Not authorized', 'alert_level': 'danger',
+		'message': "You are not authorized to access this page. \
 			If you think you deserve to be granted access, please contact the \
 			supreme leader of the mutating genome revolutionary party."
-		), 403
+	}, 403
 
 @app.errorhandler(500)
 def internal_error(error):
-	return render_template('error.html',
-		title='Server error', alert_level='danger',
-		message="The server encountered an error and could \
-			not process your request."
-		), 500
+	return {
+		'error': 'Not allowed', 
+		'alert_level': 'warning',
+		'message': "You attempted an operation that's not allowed; \
+			get your act together, hacker!"
+	}, 500
 
 ### EOF
