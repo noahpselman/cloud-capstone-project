@@ -12,15 +12,9 @@ from configparser import ConfigParser
 config = ConfigParser(os.environ)
 config.read('config.ini')
 
-REGION = config['aws']['AwsRegionName']
-QUEUE_URL = config['aws']['JobsQueueUrl']
-DYNAMO_TABLENAME = config['aws']['DynamoTablename']
-SIG_VERSION = config['aws']['SignatureVersion']
-RUN_FILE = config['local']['RunFile']
 
-JOBS_DIR = config['local']['JobsDirectory']
 try:
-    os.makedirs(JOBS_DIR)
+    os.makedirs(config['local']['JobsDirectory'])
 except FileExistsError as e:
     print("ann-jobs directory already exists")
 
@@ -30,10 +24,9 @@ def get_val_from_message(val, message):
 if __name__ == '__main__':
     # Connect to SQS and get the message queue
     try:
-        sqs_client = boto3.client("sqs", region_name=REGION)
+        sqs_client = boto3.client("sqs", region_name=config['aws']['AwsRegionName'])
     except ClientError as e:
-        print("problem connecting to sqs_client")
-        print(e)
+        print("problem connecting to sqs_client:", e)
         raise
 
     # Poll the message queue in a loop 
@@ -42,11 +35,10 @@ if __name__ == '__main__':
         # Attempt to read a message from the queue
         # Use long polling - DO NOT use sleep() to wait between polls
         try:
-            response = sqs_client.receive_message(QueueUrl=QUEUE_URL, MaxNumberOfMessages=1, WaitTimeSeconds=20)
-            # print("sqs client response:", response)
+            print("Receiving messages...")
+            response = sqs_client.receive_message(QueueUrl=config['aws']['JobsQueueUrl'], MaxNumberOfMessages=1, WaitTimeSeconds=20)
         except ClientError as e:
-            print("Problem connecting to SQS")
-            print(e)
+            print("Problem receiving messages:", e)
             raise
         
         try:
@@ -57,11 +49,15 @@ if __name__ == '__main__':
         
         print(f"found {len(messages)} messages")
 
+
         for message in messages:
-            receipt_handle = message['ReceiptHandle']
-            body = json.loads(message['Body'])
-            content = json.loads(body['Message'])
-            # print(content)
+            print("starting the message loop")
+            try:
+                receipt_handle = message['ReceiptHandle']
+                body = json.loads(message['Body'])
+                content = json.loads(body['Message'])
+            except KeyError as e:
+                print("Message did not contain necessary data:", e)
 
             # Extract Parameters from message
             job_id = content['job_id']
@@ -70,26 +66,26 @@ if __name__ == '__main__':
             s3_key_input_file = content['s3_key_input_file']
             s3_inputs_bucket = content['s3_inputs_bucket']
 
-            print("\tjob_id", job_id)
 
             # make job directory    
-            job_dir = f"{JOBS_DIR}/{user_id}/{job_id}"
+            job_dir = f"{config['local']['JobsDirectory']}/{user_id}/{job_id}"
             try:
                 os.makedirs(job_dir)
             except FileExistsError:
                 # this should never happen
-                print(f"\tjob id {job_id} already as a corresponding folder")
+                print(f"job id {job_id} already as a corresponding folder")
                 continue
 
 
             # download files to local ec2
+            print("Downloading input files to ec2...")
             try:
                 s3_client = boto3.client('s3', 
-                                    region_name=REGION, 
-                                    config=Config(signature_version=SIG_VERSION))
+                                    region_name=config['aws']['AwsRegionName'], 
+                                    config=Config(signature_version=config['aws']['SignatureVersion']))
             except ClientError as e:
 
-                print("\tProblem connecting to s3:", e)
+                print("Problem connecting to s3:", e)
                 continue
             
             input_file = s3_key_input_file.split('/')[-1]
@@ -98,46 +94,45 @@ if __name__ == '__main__':
                 try:
                     s3_client.download_fileobj(s3_inputs_bucket, s3_key_input_file, data)
                 except ClientError as e:
-                    print("\tProblem downloading from s3:", e)
+                    print("Problem downloading from s3:", e)
                     continue
-                    # possibly add logic to put this in a exception queue
 
             # run subprocess
-            # run_file = f"{ROOT}/hw5-noahpselman/run.py"
-            args = f"python {RUN_FILE} {input_path}"
+            print("Initiating subprocess to run job...")
+            args = f"python {config['local']['RunFile']} {input_path}"
             try:
                 p = Popen(args, stdout=PIPE, shell=True)
             except Exception as e:
-                print("\tProblem initiating hw5_run.py subprocess:", e)
+                print("Problem initiating run.py subprocess:", e)
                 continue
-                # possibly add logic to put this in a exception queue
-
 
             # update dynamo db
-            print("updating dynamo with ", job_id)
+            print("Updating dynamo...")
             update_expression = "SET job_status = :new_job_status"
             expression_vals = {":new_job_status": {"S": "RUNNING"}, ":pending": {"S": "PENDING"}}
             condtion_expression = "job_status = :pending"
             try:
-                dynamo_client = boto3.client('dynamodb', region_name=REGION)
-                response = dynamo_client.update_item(TableName=DYNAMO_TABLENAME, 
+                dynamo_client = boto3.client('dynamodb', region_name=config['aws']['AwsRegionName'])
+                response = dynamo_client.update_item(TableName=config['aws']['DynamoTablename'], 
                                                         Key={'job_id': {'S': job_id}}, 
                                                         UpdateExpression=update_expression,
                                                         ExpressionAttributeValues=expression_vals,
                                                         ConditionExpression=condtion_expression)
             except ClientError as e:
-                print("\tThere was an issue uploading the results to the Dynamo Table:", e)
+                print("There was an issue uploading the results to the Dynamo Table:", e)
                 continue
 
             if response['ResponseMetadata']['HTTPStatusCode'] == 200:
                 pass
             else:
-                print(f"\tThere was a response with an HTTPStatusCode of {response['ResponseMetadata']['HTTPStatusCode']} after uploading to Dynamo")
+                print(f"There was a response with an HTTPStatusCode of {response['ResponseMetadata']['HTTPStatusCode']} after uploading to Dynamo")
                 continue
 
             # delete message
+            print("Deleting message")
             try:
-                sqs_client.delete_message(QueueUrl=QUEUE_URL, ReceiptHandle=receipt_handle)
+                sqs_client.delete_message(QueueUrl=config['aws']['JobsQueueUrl'], ReceiptHandle=receipt_handle)
+                print("deleted message")
             except ClientError as e:
                 print("\tThere was an error deleting message the message from the SQS:", e)
 
