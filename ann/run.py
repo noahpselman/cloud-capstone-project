@@ -155,7 +155,7 @@ if __name__ == '__main__':
 
 			# Initiate step function
 			print("Initiating step function")
-			user_role = helpers.get_user_profile(user_id).role
+			user_role = helpers.get_user_profile(user_id)['role']
 			if user_role == 'free_user':
 				try:
 					step_client = boto3.client('stepfunctions', region_name=REGION)					
