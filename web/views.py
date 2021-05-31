@@ -192,7 +192,7 @@ def annotation_details(id):
 
 	attributes = (['job_id', 'submit_time', 'input_file_name', 
 				   'job_status', 'complete_time',  
-				   's3_key_result_file', 's3_key_input_file', 'user_id'])
+				   's3_key_result_file', 's3_key_input_file', 'user_id', 'retrieval_status'])
 
 	try:
 		print("Getting job from Dynamo")
