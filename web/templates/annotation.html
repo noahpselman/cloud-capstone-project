@@ -28,12 +28,12 @@ University of Chicago
         <div>
         <b>Annotated Results File: </b>
         {% if (session['role'] == 'premium_user' and 
-          (item['retrieval_status']=='RETRIEVED' or item['archive_status']=='NOT ARCHIVED')) or 
-          (item['archive_status'] == 'NOT_ARCHIVED')%}
+          (item['retrieval_status'] == 'RETRIEVED' or item['archive_status'] == 'NOT ARCHIVED')) or 
+          (item['archive_status'] == 'NOT_ARCHIVED') %}
         <a href={{result_url}}> download</a>
         {% elif session['role'] == 'free_user' %}
         <a href="{{request.url_root + '/subscribe'}}"> upgrade to Premium for download</a>
-        {% elif item['retrieval_status'] == 'RETRIEVING'%}
+        {% elif item['retrieval_status'] == 'RETRIEVING' %}
         currently retrieving... result file should be available for download within a few hours
         {% endif %}
         </div>

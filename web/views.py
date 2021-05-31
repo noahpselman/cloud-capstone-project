@@ -191,7 +191,7 @@ def annotation_details(id):
 	result_bucket = app.config['AWS_S3_RESULTS_BUCKET']
 
 	attributes = (['job_id', 'submit_time', 'input_file_name', 
-				   'job_status', 'complete_time',  
+				   'job_status', 'complete_time', 'archive_status',
 				   's3_key_result_file', 's3_key_input_file', 'user_id', 'retrieval_status'])
 
 	try:
