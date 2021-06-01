@@ -204,6 +204,11 @@ def annotation_details(id):
 		item = {k: list(v.values())[0] for k, v in item.items()}
 		item['submit_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(item['submit_time']))))
 		item['complete_time'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(item['complete_time']))))
+		
+		# hacky way to template rendering bug
+		item['archive_status'] = item.get('archive_status', 'NOT_ARCHIVED')
+		item['retrieval_status'] = item.get('retrieval_status', 'NOT_RETRIEVED')
+
 	except ClientError as e:
 		print("Failed to get job from Dynamo:", e)
 		app.logger.error(f'Problem querying in Dynamo DB: {e}')
