@@ -28,7 +28,7 @@ University of Chicago
         <div>
         <b>Annotated Results File: </b>
         {% if (session['role'] == 'premium_user' and 
-          (item['retrieval_status'] == 'RETRIEVED' or item['archive_status'] == 'NOT_ARCHIVED')) or 
+          ((item['retrieval_status'] == 'RETRIEVED') or (item['archive_status'] == 'NOT_ARCHIVED'))) or 
           (item['archive_status'] == 'NOT_ARCHIVED') %}
         <a href={{result_url}}> download</a>
         {% elif session['role'] == 'free_user' %}
