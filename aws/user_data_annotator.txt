@@ -1,3 +1,6 @@
-#!/bin/bash -ex
-
-### EOUserData
+#!/bin/bash
+aws s3 cp s3://mpcs-students/nselman/gas_annotator.zip /home/ubuntu/
+unzip /home/ubuntu/gas_annotator.zip -d home/ubuntu/
+chown -R ubuntu:ubuntu /home/ubuntu/gas/ /home/ubuntu/anntools/ /home/ubuntu/ann-jobs/
+chmod +x /home/ubuntu/gas/ann/run_ann.sh
+sudo -u ubuntu /home/ubuntu/gas/ann/run_ann.sh &
