@@ -13,7 +13,7 @@ Directory contents are as follows:
 
 The GAS (Gene Annotation Service) framework allows user to submit and view results of gene annotations jobs.  Users can be free or premium.  Free results for free users are archieved soon after completion whereas premium users' results are stored in perpetuity.  The framework is built as a distributed system described by the following chart.
 
-!()[imagesdistributed-system.png]
+!()[images/cloud-proj.png]
 
 Notice how messages between ec2 groups are persisted using SNS and SQS.  This allows the system to be fault tolerent.  EC2 instances running the web server and annotation server are members of auto-scaling groups that add/remove instances dependent on usage metrics.
 
