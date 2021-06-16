@@ -7,8 +7,22 @@ Directory contents are as follows:
 * `/util` - Utility scripts/apps for notifications, archival, and restoration
 * `/aws` - AWS user data files
 
+** Note: The AWS and Globus Accounts behind this project are no longer in service. **
+
+## Project Description
+
+The GAS (Gene Annotation Service) framework allows user to submit and view results of gene annotations jobs.  Users can be free or premium.  Free results for free users are archieved soon after completion whereas premium users' results are stored in perpetuity.  The framework is built as a distributed system described by the following chart.
+
+!()[imagesdistributed-system.png]
+
+Notice how messages between ec2 groups are persisted using SNS and SQS.  This allows the system to be fault tolerent.  EC2 instances running the web server and annotation server are members of auto-scaling groups that add/remove instances dependent on usage metrics.
+
+Globus is used for authentication and Stripe is used to handle credit card verification (of course only fake cards are used for the demo).  
+
+
 
 ## Analysis of Autoscaling Behavior
+Locusts were used to test the autoscaling behavior.  Below is an analysis of how the tests played out.
 
 #### Scaling out of web
 The autoscaling of the web group went as expected.  After unleashing the locusts, the group added an instance every 5 minutes.  As the number of requests did not subside, this continued until the group reached 10 instances, it's maximum.  The  process was monotonic in that at no point did it remove an instance.  This may have been possible since the alarm to scale in uses target wait time as its metric.  Had the requests come back quicker, there may have been conflicting instructions from either alarm (as happened to some of my classmates).  These observations underlie a reason that the request count may not be an optimal metric for scaling up.  Receiving a high number of requests is only harmful to our system insofar as it impacts the user experience (defined broadly).  Therefore, other metrics may be appropriate for scaling out, such as target response time.  Because various endpoints are associated with vastly different workloads, other metrics may better capture important information like processed bytes.
@@ -24,8 +38,7 @@ elb-load-test-locust
 ![](/images/elb-load-test.PNG)
 ![](/images/elb-load-test1.PNG)
 
-#### Scaling in of ann
-
+#### Scaling in of annotator
 
 ## Description of Various Processes
 #### Archive Process
@@ -33,8 +46,6 @@ The archival process is initiated in ann/run.py.  If a user is a free user, run.
 
 #### Restore Process
 When a user upgrades to premium, a post is made to the /subscribe endpoint on the web-app.  That endpoint publishes a message to the SNS topic nselman_thaw.  Two services are subscribed to that topic:  a flask app run on and ec2 nselman_thaw, and an SQS called nselman_thaw.  The flask app reads the message from the queue and initiates a retrieval from the glacier archive.  Upon completion, the retrieval job publishes a message to the SNS topic, nselman_restore that contains the data required to read the retrieved job.  An SQS called nselman restore as well as a Lambda function called nselman_restore are subscribed to that SNS topic.  The Lambda function reads a message from the corresponding SQS, reads the retrieved results file, and puts it to results s3 at the same location where the results was initially stored after completion.
-
-
 
 
 ## Sources:
@@ -74,5 +85,5 @@ When a user upgrades to premium, a post is made to the /subscribe endpoint on th
 * https://blog.realkinetic.com/load-testing-with-locust-part-1-174040afdf23
 * https://docs.locust.io/en/latest/quickstart.html
 
-
+##### Important Note:  This project was designed by my instructor, Vas Vasiliadis.  Much of the boilerplace code, html, and server management code was written by him.
 
